@@ -163,6 +163,26 @@ def fetch_sp500_constituents() -> list[dict]:
     return table.rename(columns={"Symbol": "symbol", "Security": "name", "GICS Sector": "sector"}).to_dict("records")
 
 
+@st.cache_data(ttl=86400, show_spinner=False)
+def fetch_us_symbol_directory() -> list[dict]:
+    """Searchable US-listed symbol directory, cached daily to keep the UI responsive."""
+    url = "https://api.nasdaq.com/api/screener/stocks?tableonly=true&limit=10000&offset=0&download=true"
+    try:
+        payload = _json_request(url, {"Accept": "application/json, text/plain, */*"})
+        rows = payload.get("data", {}).get("rows", [])
+        directory = [
+            {"symbol": row["symbol"].replace(".", "-"), "name": row.get("name", "")}
+            for row in rows
+            if row.get("symbol") and re.fullmatch(r"[A-Za-z0-9-]{1,15}", row["symbol"].replace(".", "-"))
+        ]
+        if directory:
+            return directory
+    except Exception:
+        pass
+    # The fallback still covers the complete S&P 500 if the larger directory is unavailable.
+    return [{"symbol": item["symbol"], "name": item["name"]} for item in fetch_sp500_constituents()]
+
+
 @st.cache_data(ttl=600, show_spinner=False)
 def fetch_x_sentiment(symbol: str) -> Optional[list[dict]]:
     """Recent public X posts via the official API; requires an owner-provided bearer token."""
